@@ -1,0 +1,89 @@
+# Docker Compose Profesional para Conciliador Bancario
+version: '3.8'
+
+services:
+  conciliador:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: conciliador-bancario
+    ports:
+      - "8501:8501"
+    environment:
+      # Configuración básica
+      - SHEET_ID=${SHEET_ID:-TU_SHEET_ID}
+      - SHEET_TAB=${SHEET_TAB:-Movimientos_Nuevos}
+      
+      # Credenciales Google
+      - GOOGLE_SA_JSON=${GOOGLE_SA_JSON}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      
+      # Configuración avanzada
+      - BATCH_SIZE=${BATCH_SIZE:-1000}
+      - ENABLE_CACHE=${ENABLE_CACHE:-true}
+      - LOG_IMPORTS=${LOG_IMPORTS:-true}
+      
+      # Configuración de logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FILE=${LOG_FILE:-logs/app.log}
+      
+      # Configuración de seguridad
+      - DEMO_MODE=${DEMO_MODE:-false}
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-200}
+      
+      # Configuración de rendimiento
+      - CACHE_TTL=${CACHE_TTL:-300}
+      - RATE_LIMIT=${RATE_LIMIT:-100}
+      
+      # Streamlit
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_HEADLESS=true
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./src:/app/src:ro  # Solo lectura para desarrollo
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - conciliador-network
+
+  # Servicio de desarrollo con hot-reload
+  conciliador-dev:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: conciliador-dev
+    ports:
+      - "8502:8501"
+    environment:
+      - SHEET_ID=${SHEET_ID:-TU_SHEET_ID}
+      - SHEET_TAB=${SHEET_TAB:-Movimientos_Nuevos}
+      - DEMO_MODE=true
+      - LOG_LEVEL=DEBUG
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_SERVER_RUN_ON_SAVE=true
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+      - ./data:/app/data
+    restart: unless-stopped
+    profiles:
+      - dev
+    networks:
+      - conciliador-network
+
+networks:
+  conciliador-network:
+    driver: bridge
+
+volumes:
+  logs:
+  data:

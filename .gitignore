@@ -1,0 +1,104 @@
+
+# Archivos de entorno y configuración
+.env
+.env.local
+.env.production
+*.env
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Credenciales y archivos sensibles
+*.json
+!requirements.json
+!package.json
+!tsconfig.json
+mi_sa.json
+spei-bot-*.json
+*-credentials.json
+*-service-account.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos temporales y de testing
+*.tmp
+*.temp
+temp/
+tmp/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Datos de prueba y archivos específicos del proyecto
+ConsultaMovimientos_*.txt
+ConsultarMovimienos.txt
+sample_data.csv
+test_*.py
+!tests/test_*.py
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# OS específicos
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Archivos de documentación temporal
+*.md.backup
+*.md.tmp
