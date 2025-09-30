@@ -6,6 +6,8 @@ Servicio de Google Sheets - Manejo profesional de integración con Google Sheets
 import os
 import json
 import logging
+import sys
+from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
 import pandas as pd
 import gspread
@@ -177,26 +179,31 @@ class GoogleSheetsService:
     
     def insert_results(self, results: List[Dict[str, Any]], sheet_tab: str):
         """
-        Insertar resultados procesados en Google Sheets
-        
+        Insertar resultados procesados en Google Sheets usando SheetsClient correcto
+
         Args:
             results: Lista de resultados procesados
             sheet_tab: Nombre de la pestaña de destino
         """
         try:
-            # Obtener la pestaña de destino
-            tab = self.worksheet.worksheet(sheet_tab)
-            
+            # Importar SheetsClient dinámicamente para evitar conflictos de imports
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from sheets_client import SheetsClient
+
+            # Usar SheetsClient en lugar de append_rows para insertar en la ubicación correcta
+            sheets_client = SheetsClient(self.sheet_id)
+
             # Preparar datos para inserción
             all_new_data = []
             all_log_entries = []
-            
+
             for result in results:
-                if not result["new_data"].empty:
+                # Filtrar solo archivos exitosos (no duplicados)
+                if result.get("status") != "skipped_duplicate" and not result["new_data"].empty:
                     # Convertir DataFrame a lista de listas
                     data_to_insert = result["new_data"].values.tolist()
                     all_new_data.extend(data_to_insert)
-                
+
                 # Preparar entrada de log
                 log_entry = [
                     result["stats"]["Archivo"],
@@ -208,21 +215,35 @@ class GoogleSheetsService:
                     result["stats"]["FechaHora"]
                 ]
                 all_log_entries.append(log_entry)
-            
-            # Insertar datos nuevos
+
+            # Insertar datos nuevos usando el método correcto
+            insertion_result = {"inserted": 0, "duplicates": 0, "skipped_duplicates": [], "errors": 0}
+
             if all_new_data:
-                logger.info(f"Insertando {len(all_new_data)} registros nuevos")
-                tab.append_rows(all_new_data)
-                logger.info("✅ Datos insertados exitosamente")
-            
+                logger.info(f"🚀 Insertando {len(all_new_data)} registros nuevos en '{sheet_tab}'")
+
+                # Usar append_data_after_last_row que encuentra la ubicación correcta
+                insertion_result = sheets_client.append_data_after_last_row(sheet_tab, all_new_data)
+
+                logger.info(f"✅ Datos insertados exitosamente:")
+                logger.info(f"   • Registros insertados: {insertion_result['inserted']}")
+                logger.info(f"   • Duplicados saltados: {insertion_result['duplicates']}")
+                logger.info(f"   • Última fila usada: {insertion_result['last_row_used']}")
+                logger.info(f"   • Próxima fila disponible: {insertion_result['next_available_row']}")
+            else:
+                logger.warning("⚠️ No hay datos nuevos para insertar (todos duplicados o vacíos)")
+
             # Registrar en log de importaciones
             if all_log_entries:
                 self._log_import_entries(all_log_entries)
-            
-            logger.info(f"Proceso de inserción completado: {len(results)} archivos procesados")
-            
+
+            logger.info(f"✅ Proceso de inserción completado: {len(results)} archivos procesados")
+
+            # Retornar resultado para mostrar en UI
+            return insertion_result
+
         except Exception as e:
-            logger.error(f"Error insertando resultados: {e}")
+            logger.error(f"❌ Error insertando resultados: {e}", exc_info=True)
             raise
     
     def _log_import_entries(self, log_entries: List[List[str]]):

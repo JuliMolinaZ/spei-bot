@@ -183,16 +183,31 @@ def classify_tipo(desc):
 
 
 def _build_uid(row):
+    """
+    Genera UID único y robusto para cada transacción.
+    Usa múltiples campos para garantizar unicidad.
+    """
     cr = row.get("ClaveRastreo")
     tipo = str(row.get("Tipo") or "")
+
+    # Para SPEI con clave de rastreo válida
     if cr and len(str(cr)) >= 6 and tipo.startswith("SPEI"):
         return f"SPEI:{cr}"
-    desc = str(row.get("Descripción") or "")
-    desc_key = re.sub(r"\s+", "", desc)[:24]
+
+    # Para todas las demás transacciones, usar combinación robusta de campos
     fecha = row.get("Fecha") or ""
     hora = row.get("Hora") or ""
     recibo = str(row.get("Recibo") or "")
-    return f"REC:{recibo}|{fecha}|{hora}|{desc_key}"
+    cargo = str(row.get("Cargo") or "0")
+    abono = str(row.get("Abono") or "0")
+    desc = str(row.get("Descripción") or "")
+
+    # Limpiar descripción (primeros 20 caracteres sin espacios)
+    desc_key = re.sub(r"\s+", "", desc)[:20]
+
+    # UID robusto: fecha|hora|recibo|cargo|abono|descripción
+    # Esto garantiza que incluso transacciones similares tengan UIDs únicos
+    return f"TXN:{fecha}|{hora}|{recibo}|{cargo}|{abono}|{desc_key}"
 
 
 def parse_bank_txt(df_raw: pd.DataFrame) -> pd.DataFrame:

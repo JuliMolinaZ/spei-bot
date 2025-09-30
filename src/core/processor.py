@@ -106,15 +106,13 @@ class BankProcessor:
         Returns:
             Resultado del procesamiento o None si hay error
         """
-        # Generar hash del archivo
+        # Generar hash del archivo para registro (NO para validación)
         file_hash = hashlib.md5(uploaded_file.read()).hexdigest()
         uploaded_file.seek(0)
-        
-        # Verificar si ya fue importado (saltear en modo demo)
-        if not demo_mode and sheets_service:
-            if sheets_service.check_file_hash_exists(file_hash):
-                logger.warning(f"Archivo {uploaded_file.name} ya fue importado anteriormente")
-                return None
+
+        # NOTA: NO validamos hash de archivo - solo Recibo+Descripción
+        # Esto permite cargar el mismo archivo con datos actualizados
+        logger.info(f"Procesando archivo {uploaded_file.name} (hash: {file_hash[:8]}...)")
         
         # PASO 1: Lectura del archivo
         logger.info(f"Leyendo archivo: {uploaded_file.name}")
@@ -140,19 +138,55 @@ class BankProcessor:
         logger.info(f"Generando UIDs únicos para: {uploaded_file.name}")
         df = self.parser.add_unique_ids(df)
         
-        # PASO 5: Análisis de duplicados
-        logger.info(f"Analizando duplicados en: {uploaded_file.name}")
+        # PASO 5: Formatear PRIMERO para tener Recibo correcto
+        logger.info(f"Formateando datos de: {uploaded_file.name}")
+        df_formatted = self.formatter.format_for_sheets(df)
+
+        # PASO 6: Validar duplicados por Recibo+Descripción en Google Sheets
+        logger.info(f"Validando duplicados por Recibo+Descripción en: {uploaded_file.name}")
+        duplicates_info = []
+        nuevos_indices = []
+
+        if sheets_service and not demo_mode:
+            try:
+                # Obtener datos existentes de Google Sheets para validar
+                existing_recibo_desc = self._get_existing_recibo_desc(sheets_service)
+                logger.info(f"📊 Validando contra {len(existing_recibo_desc)} combinaciones Recibo+Descripción en Sheets")
+
+                # Validar cada registro formateado
+                for idx, row in df_formatted.iterrows():
+                    recibo = str(row.get("Clave", "")).strip() if pd.notna(row.get("Clave")) else ""
+                    desc = str(row.get("Descripción", "")).strip() if pd.notna(row.get("Descripción")) else ""
+                    combo = f"{recibo}|{desc}"
+
+                    if combo in existing_recibo_desc:
+                        duplicates_info.append({
+                            "row_index": idx,
+                            "recibo": recibo,
+                            "descripcion": desc,
+                            "reason": "Recibo+Descripción ya existe en Google Sheets"
+                        })
+                    else:
+                        nuevos_indices.append(idx)
+                        existing_recibo_desc.add(combo)  # Evitar duplicados dentro del mismo archivo
+
+                logger.info(f"✅ Validación completada: {len(nuevos_indices)} nuevos, {len(duplicates_info)} duplicados")
+
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo validar contra Google Sheets: {e}")
+                # Si falla la validación, asumir que todos son nuevos
+                nuevos_indices = list(df_formatted.index)
+        else:
+            # Sin Google Sheets, todos son nuevos
+            nuevos_indices = list(df_formatted.index)
+
+        # Filtrar solo los registros nuevos
+        nuevos = df_formatted.iloc[nuevos_indices].copy() if nuevos_indices else pd.DataFrame()
+
+        # PASO 7: Análisis de duplicados por UID (análisis legacy)
+        logger.info(f"Analizando duplicados por UID en: {uploaded_file.name}")
         analysis = analyze_duplicates_exhaustive(df, existing_analysis)
         validation = validate_insertion_safety(analysis)
-        
-        # Preparar datos nuevos
-        nuevos = pd.DataFrame()
-        if analysis["safe_to_insert"]:
-            safe_indices = [item["row_index"] for item in analysis["safe_to_insert"]]
-            nuevos = df.iloc[safe_indices].copy()
-            
-            # Formatear para Google Sheets
-            nuevos = self.formatter.format_for_sheets(nuevos)
         
         # Estadísticas del archivo
         stats = {
@@ -160,21 +194,66 @@ class BankProcessor:
             "HashArchivo": file_hash,
             "FilasLeídas": len(df),
             "NuevosInsertados": len(nuevos),
-            "DuplicadosSaltados": analysis.get('summary', {}).get('duplicates', 0),
-            "Conflictivos": analysis.get('summary', {}).get('conflicts', 0),
+            "DuplicadosSaltados": len(duplicates_info),
+            "Conflictivos": 0,
             "FechaHora": datetime.now().isoformat(timespec="seconds"),
         }
-        
+
         result = {
             "file_name": uploaded_file.name,
             "file_hash": file_hash,
             "raw_data": df,
             "new_data": nuevos,
+            "duplicates": duplicates_info,  # Lista de duplicados con info completa
             "analysis": analysis,
             "validation": validation,
             "stats": stats,
         }
         
-        logger.info(f"Archivo {uploaded_file.name} procesado: {len(nuevos)} registros nuevos")
+        logger.info(f"Archivo {uploaded_file.name} procesado: {len(nuevos)} registros nuevos, {len(duplicates_info)} duplicados")
         return result
+
+    def _get_existing_recibo_desc(self, sheets_service: GoogleSheetsService) -> set:
+        """
+        Obtener combinaciones existentes de Recibo+Descripción desde Google Sheets
+
+        Args:
+            sheets_service: Servicio de Google Sheets
+
+        Returns:
+            Set de combinaciones "recibo|descripcion"
+        """
+        try:
+            # Importar SheetsClient para acceder a los datos
+            import sys
+            from pathlib import Path
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from sheets_client import SheetsClient
+
+            sheets_client = SheetsClient(sheets_service.sheet_id)
+            worksheet = sheets_service.worksheet.worksheet("Acumulado")
+
+            # Obtener todas las filas
+            all_values = worksheet.get_all_values()
+            headers = all_values[0] if all_values else []
+
+            # Encontrar índices de columnas
+            clave_idx = headers.index("Clave") if "Clave" in headers else -1
+            desc_idx = headers.index("Descripción") if "Descripción" in headers else -1
+
+            existing_recibo_desc = set()
+
+            if clave_idx >= 0 and desc_idx >= 0:
+                for row in all_values[1:]:  # Saltar headers
+                    if len(row) > max(clave_idx, desc_idx):
+                        recibo = str(row[clave_idx]).strip() if row[clave_idx] else ""
+                        desc = str(row[desc_idx]).strip() if row[desc_idx] else ""
+                        if recibo and desc:
+                            existing_recibo_desc.add(f"{recibo}|{desc}")
+
+            return existing_recibo_desc
+
+        except Exception as e:
+            logger.warning(f"Error obteniendo Recibo+Descripción de Sheets: {e}")
+            return set()
 

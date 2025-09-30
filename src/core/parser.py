@@ -211,3 +211,47 @@ def add_uids(df: pd.DataFrame) -> pd.DataFrame:
 
     df["UID"] = df.apply(_build_uid, axis=1)
     return df
+
+
+class BankParser:
+    """Parser principal para archivos bancarios"""
+    
+    def __init__(self):
+        """Inicializar el parser"""
+        pass
+    
+    def parse_data(self, df_raw: pd.DataFrame) -> pd.DataFrame:
+        """
+        Parsear datos bancarios desde DataFrame raw
+        
+        Args:
+            df_raw: DataFrame con datos sin procesar
+            
+        Returns:
+            DataFrame parseado y normalizado
+        """
+        return parse_bank_txt(df_raw)
+    
+    def classify_transaction_type(self, description: str) -> str:
+        """
+        Clasificar el tipo de transacción basado en la descripción
+        
+        Args:
+            description: Descripción de la transacción
+            
+        Returns:
+            Tipo de transacción clasificado
+        """
+        return classify_tipo(description)
+    
+    def add_unique_ids(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Agregar UIDs únicos al DataFrame
+        
+        Args:
+            df: DataFrame al cual agregar UIDs
+            
+        Returns:
+            DataFrame con UIDs agregados
+        """
+        return add_uids(df)

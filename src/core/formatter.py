@@ -98,26 +98,18 @@ def adapt_to_acumulado_format(df: pd.DataFrame, start_row: int = None) -> pd.Dat
     else:
         acumulado_df["Hora"] = datetime.now().strftime("%H:%M:%S")
     
-    # COLUMNA 6: Clave - Número de referencia largo (como 3803705013215)
+    # COLUMNA 6: Clave - SIEMPRE usar el Recibo original del TXT (NO ClaveRastreo)
+    # Esto es CRÍTICO para la validación de duplicados
     claves = []
     for i in range(len(df)):
-        if "ClaveRastreo" in df.columns and pd.notna(df.iloc[i]["ClaveRastreo"]):
-            # Usar ClaveRastreo si existe
-            clave = str(df.iloc[i]["ClaveRastreo"])
-            # Si es muy corta, expandirla
-            if len(clave) < 10:
-                clave = f"380{clave:0>10}"
-            claves.append(clave)
-        elif "Recibo" in df.columns and pd.notna(df.iloc[i]["Recibo"]):
-            # Usar Recibo expandido
-            recibo = str(df.iloc[i]["Recibo"])
-            if len(recibo) < 10:
-                recibo = f"380{recibo:0>10}"
+        if "Recibo" in df.columns and pd.notna(df.iloc[i]["Recibo"]):
+            # SIEMPRE usar Recibo tal cual viene en el TXT
+            recibo = str(df.iloc[i]["Recibo"]).strip()
             claves.append(recibo)
         else:
-            # Generar número realista de 13 dígitos
+            # Si no hay recibo, generar número realista de 13 dígitos
             claves.append(f"{3803705013215 + i}")
-    
+
     acumulado_df["Clave"] = claves
     
     # COLUMNA 7: Descripción completa (como en el original)
@@ -142,12 +134,9 @@ def adapt_to_acumulado_format(df: pd.DataFrame, start_row: int = None) -> pd.Dat
                 acumulado_df.loc[i, "Egreso"] = ""
                 acumulado_df.loc[i, "Ingreso"] = format_currency_exact(abono)
     
-    # COLUMNAS 10-13: Columnas adicionales (vacías como en el patrón)
-    acumulado_df["Autorizado"] = ""
-    acumulado_df["Capturado"] = ""
-    acumulado_df["Notas"] = ""
-    acumulado_df["__PowerAppsId__"] = ""
-    
+    # NO incluir columnas 10-13 (J-M) porque ya tienen datos/fórmulas en la hoja
+    # Solo retornar columnas A-I (9 columnas)
+
     return acumulado_df
 
 
@@ -398,3 +387,23 @@ def create_validation_row(file_name: str, record_count: int) -> dict:
         "__PowerAppsId__": hash(f"validation_{file_name}_{datetime.now().isoformat()}")
         % 1000000000,
     }
+
+
+class DataFormatter:
+    """Formateador principal para datos bancarios"""
+    
+    def __init__(self):
+        """Inicializar el formateador"""
+        pass
+    
+    def format_for_sheets(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Formatear datos para inserción en Google Sheets
+        
+        Args:
+            df: DataFrame con datos a formatear
+            
+        Returns:
+            DataFrame formateado para Google Sheets
+        """
+        return adapt_to_acumulado_format(df)

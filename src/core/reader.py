@@ -58,8 +58,28 @@ def read_smart_csv(uploaded_file_or_content):
     
     # Detectar si es formato BanBajío
     if is_banbajio_format(content):
-        print("🏦 Detectado formato BanBajío - usando lector especializado")
+        # Detectado formato BanBajío - usando lector especializado
         return read_banbajio_file(content)
     else:
-        print("📋 Formato CSV estándar - usando pandas normal")
+        # Formato CSV estándar - usando pandas
         return pd.read_csv(io.StringIO(content), sep=None, engine="python")
+
+
+class BankReader:
+    """Lector principal para archivos bancarios"""
+    
+    def __init__(self):
+        """Inicializar el lector"""
+        pass
+    
+    def read_file(self, uploaded_file) -> pd.DataFrame:
+        """
+        Leer archivo bancario desde Streamlit uploaded_file
+        
+        Args:
+            uploaded_file: Archivo subido desde Streamlit
+            
+        Returns:
+            DataFrame con datos leídos
+        """
+        return read_smart_csv(uploaded_file)

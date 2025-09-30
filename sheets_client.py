@@ -888,16 +888,40 @@ class SheetsClient:
             # PASO 0: Debug estado inicial
             debug_before = self.debug_sheet_state(sheet_tab, "before_insertion")
 
-            # PASO 1: Encontrar la primera fila vacía en columna A (para insertar en tabla)
+            # PASO 1: Encontrar la primera fila VACÍA en COLUMNA A (tabla con fórmulas)
             logger.info(f"🔍 Buscando primera fila vacía en columna A de '{sheet_tab}'...")
-            next_row = self.find_next_empty_row_in_table(sheet_tab)
-            logger.info(f"📝 Insertando datos a partir de la fila {next_row} (primera columna A vacía)")
-
-            # Para compatibilidad con verificación, obtener también la última fila general
-            last_row = self.find_last_data_row(sheet_tab)
-
-            # PASO 2: Verificar y crear hoja si es necesario
             worksheet = self._get_worksheet(sheet_tab, create_if_missing=True)
+
+            # Obtener solo columna A
+            col_a_values = worksheet.col_values(1)
+
+            # Buscar primera fila vacía en columna A
+            next_row = None
+            for i, value in enumerate(col_a_values, start=1):
+                if not value or str(value).strip() == '':
+                    next_row = i
+                    break
+
+            # Si no hay vacías, insertar después de la última
+            if next_row is None:
+                next_row = len(col_a_values) + 1
+
+            logger.info(f"📝 Primera fila vacía en columna A: {next_row}")
+            logger.info(f"📝 Insertando datos a partir de la fila {next_row}")
+
+            # PASO 2: Obtener el último consecutivo de la tabla
+            logger.info(f"🔢 Obteniendo último consecutivo...")
+            last_consecutive_before = self._get_last_consecutive_number(sheet_tab)
+            logger.info(f"✅ Último consecutivo encontrado: {last_consecutive_before}, próximo será: {last_consecutive_before + 1}")
+
+            # NUEVO: Asegurar que hay suficientes filas en la hoja
+            current_row_count = worksheet.row_count
+            rows_needed = next_row + len(data) + 100  # Extra buffer
+
+            if rows_needed > current_row_count:
+                logger.info(f"📏 Expandiendo hoja: {current_row_count} → {rows_needed} filas")
+                worksheet.add_rows(rows_needed - current_row_count)
+                logger.info(f"✅ Hoja expandida exitosamente")
 
             # PASO 3: Expandir la hoja si es necesario (con manejo de protección)
             current_rows = worksheet.row_count
@@ -929,40 +953,151 @@ class SheetsClient:
             except Exception as e:
                 logger.warning(f"⚠️ No se pudo validar duplicados: {e}")
 
-            # PASO 5: Filtrar duplicados si hay validación UID
+            # PASO 5: Filtrar duplicados por UID Y por Recibo+Descripción
             new_records = []
             duplicate_count = 0
+            skipped_duplicates = []  # Para reportar duplicados al usuario
+
+            # Obtener combinaciones existentes de Recibo + Descripción
+            existing_recibo_desc = set()
+            try:
+                logger.info(f"🔍 VALIDACION: Obteniendo Recibo+Descripción existentes (last_row={last_row})")
+                if last_row > 1:
+                    # Obtener todas las filas de la hoja
+                    all_values = worksheet.get_all_values()
+                    headers = all_values[0] if all_values else []
+                    logger.info(f"🔍 VALIDACION: Headers encontrados: {headers}")
+
+                    # Encontrar índices de columnas relevantes
+                    clave_idx = headers.index("Clave") if "Clave" in headers else -1
+                    desc_idx = headers.index("Descripción") if "Descripción" in headers else -1
+                    logger.info(f"🔍 VALIDACION: Índices - Clave={clave_idx}, Descripción={desc_idx}")
+
+                    if clave_idx >= 0 and desc_idx >= 0:
+                        for row in all_values[1:]:  # Saltar headers
+                            if len(row) > max(clave_idx, desc_idx):
+                                recibo = str(row[clave_idx]).strip() if row[clave_idx] else ""
+                                desc = str(row[desc_idx]).strip() if row[desc_idx] else ""
+                                if recibo and desc:
+                                    existing_recibo_desc.add(f"{recibo}|{desc}")
+
+                        logger.info(f"✅ Validando contra {len(existing_recibo_desc)} combinaciones Recibo+Descripción existentes")
+                        if existing_recibo_desc:
+                            # Mostrar algunas muestras
+                            sample = list(existing_recibo_desc)[:3]
+                            logger.info(f"🔍 VALIDACION: Ejemplos de combinaciones: {sample}")
+                    else:
+                        logger.warning(f"⚠️ VALIDACION: No se encontraron columnas Clave o Descripción en headers")
+                else:
+                    logger.info(f"ℹ️ VALIDACION: Hoja vacía (last_row={last_row}), no hay duplicados para validar")
+            except Exception as e:
+                logger.error(f"❌ VALIDACION: Error obteniendo Recibo+Descripción existentes: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+
+            # Validar cada registro
+            logger.info(f"🔍 VALIDACION: Iniciando validación de {len(data)} registros")
+            logger.info(f"🔍 VALIDACION: uid_column_index={uid_column_index}, existing_uids={len(existing_uids) if existing_uids else 0}")
+            logger.info(f"🔍 VALIDACION: existing_recibo_desc={len(existing_recibo_desc)}")
 
             if uid_column_index >= 0 and existing_uids:
                 for i, row in enumerate(data):
+                    is_duplicate = False
+                    skip_reason = ""
+
+                    # Validación 1: Por UID
                     if len(row) > uid_column_index and row[uid_column_index]:
                         uid = str(row[uid_column_index]).strip()
                         if uid in existing_uids:
-                            duplicate_count += 1
-                            logger.debug(f"⚠️ UID duplicado saltado: {uid}")
-                        else:
-                            new_records.append(row)
-                            existing_uids.add(uid)
+                            is_duplicate = True
+                            skip_reason = f"UID duplicado: {uid}"
+                            logger.info(f"🔍 VALIDACION: Registro {i} - UID duplicado: {uid}")
+
+                    # Validación 2: Por Recibo + Descripción (columnas 5 y 6 en formato formateado)
+                    if not is_duplicate and len(row) > 6:
+                        recibo = str(row[5]).strip() if row[5] else ""  # Columna F: Clave
+                        desc = str(row[6]).strip() if row[6] else ""    # Columna G: Descripción
+                        combo = f"{recibo}|{desc}"
+
+                        if i == 0:  # Log solo el primer registro para debug
+                            logger.info(f"🔍 VALIDACION: Registro {i} - Validando combo: {combo[:100]}")
+                            logger.info(f"🔍 VALIDACION: Registro {i} - Combo en existing? {combo in existing_recibo_desc}")
+
+                        if combo in existing_recibo_desc:
+                            is_duplicate = True
+                            skip_reason = f"Recibo+Descripción duplicado: {recibo[:20]}... | {desc[:30]}..."
+                            logger.info(f"🔍 VALIDACION: Registro {i} - Recibo+Desc duplicado: {recibo} | {desc[:50]}")
+
+                    if is_duplicate:
+                        duplicate_count += 1
+                        logger.info(f"⚠️ Saltando registro {i}: {skip_reason}")
+                        skipped_duplicates.append({
+                            "row_index": i,
+                            "recibo": row[5] if len(row) > 5 else "",
+                            "descripcion": row[6] if len(row) > 6 else "",
+                            "reason": skip_reason
+                        })
                     else:
                         new_records.append(row)
+                        # Agregar a sets para evitar duplicados dentro del mismo lote
+                        if len(row) > uid_column_index and row[uid_column_index]:
+                            existing_uids.add(str(row[uid_column_index]).strip())
+                        if len(row) > 6:
+                            recibo = str(row[5]).strip() if row[5] else ""
+                            desc = str(row[6]).strip() if row[6] else ""
+                            existing_recibo_desc.add(f"{recibo}|{desc}")
             else:
-                # Sin validación UID, insertar todos los datos
-                new_records = data
-                logger.info("ℹ️ Insertando datos sin validación de duplicados")
+                # Sin validación UID, solo validar por Recibo+Descripción
+                logger.info(f"🔍 VALIDACION: Modo sin UID - validando solo por Recibo+Descripción")
+                for i, row in enumerate(data):
+                    if len(row) > 6:
+                        recibo = str(row[5]).strip() if row[5] else ""
+                        desc = str(row[6]).strip() if row[6] else ""
+                        combo = f"{recibo}|{desc}"
+
+                        if i == 0:  # Log solo el primer registro
+                            logger.info(f"🔍 VALIDACION: Registro {i} - Validando combo: {combo[:100]}")
+                            logger.info(f"🔍 VALIDACION: Registro {i} - Combo en existing? {combo in existing_recibo_desc}")
+
+                        if combo in existing_recibo_desc:
+                            duplicate_count += 1
+                            logger.info(f"⚠️ Saltando registro {i}: Recibo+Descripción duplicado: {recibo[:20]}... | {desc[:30]}...")
+                            skipped_duplicates.append({
+                                "row_index": i,
+                                "recibo": recibo,
+                                "descripcion": desc,
+                                "reason": "Recibo+Descripción ya existe"
+                            })
+                        else:
+                            new_records.append(row)
+                            existing_recibo_desc.add(combo)
+                    else:
+                        new_records.append(row)
 
             if not new_records:
                 logger.info("ℹ️ No hay registros nuevos para insertar después de filtrar duplicados")
+                logger.info(f"📋 Total de duplicados saltados: {len(skipped_duplicates)}")
                 return {
                     "inserted": 0,
                     "duplicates": duplicate_count,
+                    "skipped_duplicates": skipped_duplicates,
                     "errors": 0,
-                    "last_row_used": last_row
+                    "last_row_used": last_row,
+                    "next_available_row": last_row + 1
                 }
 
-            # PASO 5.5: Formatear datos para la tabla 'Acumulado'
-            logger.info("🔄 Formateando datos para tabla 'Acumulado'...")
-            new_records = self._format_data_for_acumulado(new_records, sheet_tab, next_row)
-            logger.info(f"✅ {len(new_records)} registros formateados correctamente")
+            # PASO 5.5: Actualizar consecutivos (columna A)
+            # Los datos ya vienen formateados desde DataFormatter, solo actualizamos columna A
+            logger.info("🔄 Actualizando números consecutivos en columna A...")
+            logger.info(f"📊 DEBUG - Primera fila antes de actualizar consecutivo: {new_records[0] if new_records else 'NO HAY DATOS'}")
+            logger.info(f"📊 DEBUG - Cantidad de columnas en primera fila: {len(new_records[0]) if new_records else 0}")
+
+            for i, row in enumerate(new_records):
+                # Actualizar solo la columna A (consecutivo)
+                row[0] = last_consecutive_before + 1 + i
+
+            logger.info(f"✅ Consecutivos actualizados: {last_consecutive_before + 1} a {last_consecutive_before + len(new_records)}")
+            logger.info(f"📊 DEBUG - Primera fila DESPUÉS de actualizar consecutivo: {new_records[0] if new_records else 'NO HAY DATOS'}")
 
             # PASO 6: Inserción optimizada para evitar quota exceeded
             batch_size = 20  # Lotes más pequeños para evitar quota
@@ -984,6 +1119,14 @@ class SheetsClient:
                     range_name = f"A{start_row}:{end_col}{end_row}"
 
                     logger.info(f"📤 Insertando lote {i//batch_size + 1}: {len(batch)} registros en {range_name}")
+
+                    # DEBUG: Mostrar primera fila del lote para verificar estructura
+                    if i == 0 and batch:
+                        logger.info(f"🔍 DEBUG - Primera fila COMPLETA del lote a insertar:")
+                        for idx, val in enumerate(batch[0]):
+                            col_letter = self._get_column_letter(idx + 1)
+                            logger.info(f"      [{col_letter}] = {repr(val)}")
+                        logger.info(f"🔍 DEBUG - Total columnas: {len(batch[0])}")
 
                     # Insertar usando update con valor específico
                     worksheet.update(range_name, batch, value_input_option="USER_ENTERED")
@@ -1069,6 +1212,7 @@ class SheetsClient:
             result = {
                 "inserted": verified_inserted,
                 "duplicates": duplicate_count,
+                "skipped_duplicates": skipped_duplicates,  # Lista de duplicados saltados para mostrar en UI
                 "errors": error_count,
                 "last_row_used": final_last_row,
                 "next_available_row": final_last_row + 1,
@@ -1076,7 +1220,9 @@ class SheetsClient:
             }
 
             logger.info(f"🎉 INSERCIÓN COMPLETADA: {verified_inserted} insertados, "
-                        f"{duplicate_count} duplicados, {error_count} errores")
+                        f"{duplicate_count} duplicados saltados, {error_count} errores")
+            if skipped_duplicates:
+                logger.info(f"📋 Duplicados saltados: {len(skipped_duplicates)} registros con Recibo+Descripción duplicados")
             logger.info(f"📊 Próxima fila disponible: {result['next_available_row']}")
 
             if not result["verification_passed"]:
@@ -1401,7 +1547,52 @@ class SheetsClient:
             logger.error(f"Error obteniendo último consecutivo: {e}")
             return 0
 
-    def _format_data_for_acumulado(self, data: List[List], sheet_tab: str, start_row: int) -> List[List]:
+    def _get_last_consecutive_before_row(self, sheet_tab: str, before_row: int) -> int:
+        """
+        Obtiene el último número consecutivo ANTES de una fila específica.
+        Esto permite continuar la secuencia correctamente incluso si hay filas vacías.
+
+        Args:
+            sheet_tab: Nombre de la pestaña
+            before_row: Número de fila (1-indexed) antes de la cual buscar
+
+        Returns:
+            int: Último consecutivo encontrado antes de la fila especificada
+        """
+        try:
+            worksheet = self._get_worksheet(sheet_tab)
+            if not worksheet:
+                logger.warning("⚠️ No se pudo acceder a la hoja para obtener consecutivo")
+                return 0
+
+            # Obtener todos los valores de columna A
+            all_values = worksheet.get_all_values()
+            if len(all_values) <= 1:  # Solo headers o vacío
+                return 0
+
+            # Buscar el último número consecutivo válido ANTES de before_row
+            last_consecutive = 0
+            search_until = min(before_row - 1, len(all_values))  # No buscar más allá de before_row
+
+            for i in range(search_until - 1, 0, -1):  # Empezar desde before_row-1 hacia atrás
+                row = all_values[i]
+                if len(row) > 0:
+                    cell_value = row[0].strip()
+                    if cell_value.isdigit():
+                        last_consecutive = int(cell_value)
+                        logger.info(f"✅ Último consecutivo antes de fila {before_row}: {last_consecutive} (encontrado en fila {i+1})")
+                        break
+
+            if last_consecutive == 0:
+                logger.warning(f"⚠️ No se encontró consecutivo antes de fila {before_row}, empezando desde 0")
+
+            return last_consecutive
+
+        except Exception as e:
+            logger.error(f"Error obteniendo consecutivo antes de fila {before_row}: {e}")
+            return 0
+
+    def _format_data_for_acumulado(self, data: List[List], sheet_tab: str, start_row: int, last_consecutive: int = None) -> List[List]:
         """
         Transforma los datos al formato correcto para la tabla 'Acumulado':
         - Columna A: Consecutivo (si último es 200, sigue 201, etc.)
@@ -1412,12 +1603,22 @@ class SheetsClient:
         - Columna F: Clave de rastreo (no recibo)
         - Columna G: Descripción
         - Columnas H,I: Egreso/Ingreso según corresponda
+
+        Args:
+            data: Lista de listas con los datos a formatear
+            sheet_tab: Nombre de la pestaña
+            start_row: Fila donde comenzará la inserción
+            last_consecutive: Último consecutivo usado ANTES de start_row (si no se provee, se calcula)
         """
         from datetime import datetime
         import locale
 
-        # Obtener el último consecutivo para continuar la secuencia
-        last_consecutive = self._get_last_consecutive_number(sheet_tab)
+        # Si no se provee last_consecutive, calcularlo (mantener compatibilidad)
+        if last_consecutive is None:
+            last_consecutive = self._get_last_consecutive_number(sheet_tab)
+            logger.info(f"⚠️ last_consecutive no provisto, calculado: {last_consecutive}")
+        else:
+            logger.info(f"✅ Usando last_consecutive provisto: {last_consecutive}")
 
         formatted_data = []
 
@@ -1435,12 +1636,12 @@ class SheetsClient:
                 # Columna A: Consecutivo (último + 1, + 2, etc.)
                 consecutivo = last_consecutive + 1 + i
 
-                # Columna B: Vacío (según corrección)
-                columna_b = ""
+                # Columna B: Siempre 6 (según formato Acumulado)
+                columna_b = 6
 
-                # Columna C: Fórmula para calcular mes
-                fila_actual = start_row + i
-                formula_mes = f"=SI(ISDATE(D{fila_actual}),MES(D{fila_actual}),0)"
+                # Columna C: Número secuencial (1, 2, 3, ... rotativo o según patrón)
+                # Usar un patrón simple: alternar entre 1-10
+                columna_c = (i % 10) + 1
 
                 # Columna D: Fecha en formato español (12-jun-2025)
                 fecha_formateada = ""
@@ -1477,12 +1678,12 @@ class SheetsClient:
 
                 # Construir fila formateada
                 fila_formateada = [
-                    consecutivo,          # A: Consecutivo
-                    columna_b,            # B: Vacío (corregido)
-                    formula_mes,          # C: Fórmula del mes (corregido)
-                    fecha_formateada,     # D: Fecha española
-                    hora_formateada,      # E: Hora
-                    clave_rastreo,        # F: Clave de rastreo (corregido)
+                    consecutivo,          # A: Consecutivo (368, 369, ...)
+                    columna_b,            # B: Siempre 6
+                    columna_c,            # C: Secuencial 1-10 rotativo
+                    fecha_formateada,     # D: Fecha española (12-jun-2025)
+                    hora_formateada,      # E: Hora (16:49:50)
+                    clave_rastreo,        # F: Clave de rastreo
                     descripcion_formateada, # G: Descripción
                     egreso,               # H: Egreso
                     ingreso               # I: Ingreso
@@ -1508,7 +1709,7 @@ class SheetsClient:
                 ])
 
         logger.info(f"📋 Formateado {len(formatted_data)} registros para tabla 'Acumulado'")
-        logger.info(f"📊 Formato: A=Consecutivo, B=Vacío, C=Fórmula_Mes, D=Fecha_ESP, E=Hora, F=ClaveRastreo, G=Descripción, H=Egreso, I=Ingreso")
+        logger.info(f"📊 Formato: A=Consecutivo, B=6, C=Secuencial(1-10), D=Fecha_ESP, E=Hora, F=ClaveRastreo, G=Descripción, H=Egreso, I=Ingreso")
 
         return formatted_data
 
