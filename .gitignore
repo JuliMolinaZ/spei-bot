@@ -54,6 +54,10 @@ spei-bot-*.json
 *-credentials.json
 *-service-account.json
 
+# ⚠️ IMPORTANTE: Configuración de usuarios con contraseñas
+users_config.py
+users_config_production.py
+
 # Logs
 logs/
 *.log

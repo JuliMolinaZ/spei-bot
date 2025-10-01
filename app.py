@@ -18,6 +18,10 @@ from config import load_config
 from banbajio_reader import read_smart_csv
 from ux_components import *
 
+# Sistema de autenticación
+import auth
+from login_ui import show_login_page, show_session_info_sidebar, show_access_denied
+
 # Configuración de página con tema personalizado
 st.set_page_config(
     page_title="🏦 Conciliación Bancaria",
@@ -735,6 +739,19 @@ def show_insertion_interface(results, sheet_id, sheet_tab):
 
 def main():
     """Función principal de la aplicación"""
+    # Inicializar estado de autenticación
+    auth.init_session_state()
+
+    # Verificar autenticación
+    if not auth.is_authenticated():
+        # Mostrar página de login
+        show_login_page()
+        return
+
+    # Usuario autenticado - continuar con la app
+    # Mostrar información de sesión en sidebar
+    show_session_info_sidebar()
+
     # Inicialización
     sheet_id, sheet_tab = initialize_app()
     
