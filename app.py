@@ -450,7 +450,25 @@ def process_files_with_ux(uploaded_files, sheet_id, sheet_tab):
             if analysis["safe_to_insert"]:
                 safe_indices = [item["row_index"] for item in analysis["safe_to_insert"]]
                 nuevos = df.iloc[safe_indices].copy()
-                
+
+                # ORDENAR POR FECHA Y HORA (del más antiguo al más reciente)
+                if not nuevos.empty and 'Fecha' in nuevos.columns and 'Hora' in nuevos.columns:
+                    # Crear columna temporal de fecha-hora combinada para ordenar
+                    nuevos['_fecha_hora_sort'] = pd.to_datetime(
+                        nuevos['Fecha'].astype(str) + ' ' + nuevos['Hora'].astype(str),
+                        errors='coerce'
+                    )
+                    # Ordenar del más antiguo al más reciente
+                    nuevos = nuevos.sort_values('_fecha_hora_sort', ascending=True)
+                    # Eliminar columna temporal
+                    nuevos = nuevos.drop(columns=['_fecha_hora_sort'])
+
+                    show_success_animation(
+                        "Datos Ordenados",
+                        f"Registros ordenados cronológicamente del más antiguo al más reciente",
+                        f"Desde {nuevos.iloc[0]['Fecha']} hasta {nuevos.iloc[-1]['Fecha']}"
+                    )
+
                 # Formatear para Google Sheets
                 from format_adapter import adapt_to_acumulado_format
                 nuevos = adapt_to_acumulado_format(nuevos)
