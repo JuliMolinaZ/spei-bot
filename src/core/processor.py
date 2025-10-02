@@ -43,27 +43,42 @@ class BankProcessor:
         if df.empty:
             return df
 
-        # Verificar que existan las columnas necesarias
-        if "Fecha" not in df.columns or "Hora" not in df.columns:
-            logger.warning("DataFrame no contiene columnas Fecha y Hora para ordenar")
-            return df
-
         try:
+            # Detectar columnas de fecha y hora (pueden tener nombres diferentes)
+            fecha_col = None
+            hora_col = None
+
+            # Buscar columna de fecha
+            for col in df.columns:
+                if col == "Fecha" or "Fecha" in col or col == "2025-07-17T18:32:23.744Z":
+                    fecha_col = col
+                    break
+
+            # Buscar columna de hora
+            if "Hora" in df.columns:
+                hora_col = "Hora"
+
+            if not fecha_col:
+                logger.warning(f"No se encontró columna de fecha. Columnas disponibles: {df.columns.tolist()}")
+                return df
+
+            logger.info(f"Ordenando por columna de fecha: '{fecha_col}', hora: '{hora_col}'")
+
             # Crear columna temporal combinando fecha y hora
             df_sorted = df.copy()
 
             # Normalizar fechas a datetime
             def parse_datetime(row):
                 try:
-                    fecha_str = str(row["Fecha"])
-                    hora_str = str(row["Hora"]) if pd.notna(row["Hora"]) else "00:00:00"
+                    fecha_str = str(row[fecha_col])
+                    hora_str = str(row[hora_col]) if hora_col and pd.notna(row.get(hora_col)) else "00:00:00"
 
                     # Manejar diferentes formatos de fecha
                     if "-" in fecha_str and len(fecha_str.split("-")) == 3:
                         # Formato ISO (2025-01-15) o dd-mmm-yyyy
                         if len(fecha_str.split("-")[0]) == 4:  # YYYY-MM-DD
                             fecha_dt = pd.to_datetime(fecha_str, format="%Y-%m-%d")
-                        else:  # dd-mmm-yyyy
+                        else:  # dd-mmm-yyyy (ejemplo: 21-jul-2025)
                             fecha_dt = pd.to_datetime(fecha_str, format="%d-%b-%Y")
                     else:
                         fecha_dt = pd.to_datetime(fecha_str)
@@ -72,13 +87,25 @@ class BankProcessor:
                     datetime_combined = pd.to_datetime(f"{fecha_dt.date()} {hora_str}")
                     return datetime_combined
                 except Exception as e:
-                    logger.warning(f"Error parseando fecha/hora: {e}")
+                    logger.warning(f"Error parseando fecha/hora: {fecha_str} {hora_str} - {e}")
                     return pd.NaT
 
             df_sorted["_datetime_temp"] = df_sorted.apply(parse_datetime, axis=1)
 
+            # Log de fechas antes y después de ordenar para debug
+            if not df_sorted["_datetime_temp"].isna().all():
+                fecha_min = df_sorted["_datetime_temp"].min()
+                fecha_max = df_sorted["_datetime_temp"].max()
+                logger.info(f"Rango de fechas ANTES de ordenar: {fecha_min} → {fecha_max}")
+
             # Ordenar por la columna temporal
             df_sorted = df_sorted.sort_values("_datetime_temp", ascending=ascending)
+
+            # Log después de ordenar
+            if not df_sorted["_datetime_temp"].isna().all():
+                primera_fecha = df_sorted["_datetime_temp"].iloc[0]
+                ultima_fecha = df_sorted["_datetime_temp"].iloc[-1]
+                logger.info(f"Después de ordenar ({'' if ascending else 'des'}cendente): Primera={primera_fecha}, Última={ultima_fecha}")
 
             # Remover columna temporal
             df_sorted = df_sorted.drop(columns=["_datetime_temp"])
@@ -86,12 +113,12 @@ class BankProcessor:
             # Resetear índices
             df_sorted = df_sorted.reset_index(drop=True)
 
-            logger.info(f"Datos ordenados: {len(df_sorted)} registros ({'ascendente' if ascending else 'descendente'})")
+            logger.info(f"✅ Datos ordenados correctamente: {len(df_sorted)} registros ({'ascendente: antiguo→reciente' if ascending else 'descendente: reciente→antiguo'})")
 
             return df_sorted
 
         except Exception as e:
-            logger.error(f"Error ordenando datos por fecha/hora: {e}")
+            logger.error(f"Error ordenando datos por fecha/hora: {e}", exc_info=True)
             return df
         
     def process_files(
