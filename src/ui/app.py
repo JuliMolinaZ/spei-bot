@@ -6,6 +6,7 @@ Interfaz de usuario profesional para conciliación bancaria
 
 import os
 import time
+import pandas as pd
 import streamlit as st
 import logging
 from typing import Dict, Any, Optional
