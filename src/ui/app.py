@@ -12,14 +12,14 @@ from pathlib import Path
 
 # Configurar página ANTES de cualquier otra cosa
 st.set_page_config(
-    page_title="🤖 SPEI BOT - Conciliador Bancario",
+    page_title="SPEI-BOT",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://github.com/tu-repo/spei-bot',
-        'Report a bug': 'https://github.com/tu-repo/spei-bot/issues',
-        'About': "SPEI BOT - Sistema Profesional de Conciliación Bancaria v2.0"
+        'Get Help': 'https://github.com/JuliMolinaZ/spei-bot',
+        'Report a bug': 'https://github.com/JuliMolinaZ/spei-bot/issues',
+        'About': "SPEI-BOT - Sistema Profesional de Conciliación Bancaria v2.0"
     }
 )
 

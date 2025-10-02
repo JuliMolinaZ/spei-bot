@@ -34,6 +34,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copiar código fuente
 COPY src/ ./src/
 COPY main.py .
+COPY sheets_client.py .
+COPY bank_parser.py .
+COPY .env .
+COPY spei-bot-b202259d87e7.json .
 COPY env.example .
 
 # Crear directorios necesarios
@@ -52,4 +56,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8501/_stcore/health || exit 1
 
 # Comando por defecto
-CMD ["python", "main.py"]
+CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
