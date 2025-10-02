@@ -407,6 +407,10 @@ class ConciliadorApp:
                 with st.expander(preview_title, expanded=False):
                     st.markdown("**📋 Primeros 10 registros:**")
 
+                    # IMPORTANTE: Explicar qué datos se muestran
+                    st.info("**🔑 Clave** = Número de Recibo que se usará para validar duplicados\n\n"
+                           "**📅 Fecha + ⏰ Hora** = Datos organizados cronológicamente")
+
                     # Crear DataFrame de vista previa con formato personalizado
                     preview_data = result["new_data"].head(10).copy()
 
@@ -414,30 +418,55 @@ class ConciliadorApp:
                     display_cols = []
                     col_mapping = {}
 
-                    if "Fecha" in preview_data.columns:
-                        display_cols.append("Fecha")
-                        col_mapping["Fecha"] = "📅 Fecha"
+                    # Detectar columna de FECHA (puede tener nombres raros por el formato Acumulado)
+                    fecha_col = None
+                    for col in preview_data.columns:
+                        if "Fecha" in col or col == "2025-07-17T18:32:23.744Z":
+                            fecha_col = col
+                            break
 
+                    if fecha_col:
+                        display_cols.append(fecha_col)
+                        col_mapping[fecha_col] = "📅 Fecha"
+
+                    # HORA
                     if "Hora" in preview_data.columns:
                         display_cols.append("Hora")
                         col_mapping["Hora"] = "⏰ Hora"
 
-                    if "Recibo" in preview_data.columns:
-                        display_cols.append("Recibo")
-                        col_mapping["Recibo"] = "🔑 Recibo"
-                    elif "Clave" in preview_data.columns:
-                        display_cols.append("Clave")
-                        col_mapping["Clave"] = "🔑 Clave"
+                    # CLAVE (identificador único - puede ser Recibo o Clave)
+                    clave_col = None
+                    if "Clave" in preview_data.columns:
+                        clave_col = "Clave"
+                    elif "Recibo" in preview_data.columns:
+                        clave_col = "Recibo"
 
+                    if clave_col:
+                        display_cols.append(clave_col)
+                        col_mapping[clave_col] = "🔑 Clave (ID único)"
+
+                    # DESCRIPCIÓN (truncada para legibilidad)
                     if "Descripción" in preview_data.columns:
                         display_cols.append("Descripción")
                         col_mapping["Descripción"] = "📝 Descripción"
 
-                    if "Cargo" in preview_data.columns:
+                        # Truncar descripciones largas
+                        preview_data["Descripción"] = preview_data["Descripción"].apply(
+                            lambda x: str(x)[:80] + "..." if pd.notna(x) and len(str(x)) > 80 else str(x)
+                        )
+
+                    # MONTOS
+                    if "Egreso" in preview_data.columns:
+                        display_cols.append("Egreso")
+                        col_mapping["Egreso"] = "💸 Egreso"
+                    elif "Cargo" in preview_data.columns:
                         display_cols.append("Cargo")
                         col_mapping["Cargo"] = "💸 Cargo"
 
-                    if "Abono" in preview_data.columns:
+                    if "Ingreso" in preview_data.columns:
+                        display_cols.append("Ingreso")
+                        col_mapping["Ingreso"] = "💰 Ingreso"
+                    elif "Abono" in preview_data.columns:
                         display_cols.append("Abono")
                         col_mapping["Abono"] = "💰 Abono"
 
@@ -452,10 +481,33 @@ class ConciliadorApp:
                             preview_display,
                             use_container_width=True,
                             hide_index=True,
-                            height=400
+                            height=450,
+                            column_config={
+                                "📅 Fecha": st.column_config.TextColumn(
+                                    "📅 Fecha",
+                                    help="Fecha del movimiento",
+                                    width="medium"
+                                ),
+                                "⏰ Hora": st.column_config.TextColumn(
+                                    "⏰ Hora",
+                                    help="Hora del movimiento",
+                                    width="small"
+                                ),
+                                "🔑 Clave (ID único)": st.column_config.TextColumn(
+                                    "🔑 Clave",
+                                    help="Número de recibo usado para validar duplicados",
+                                    width="medium"
+                                ),
+                                "📝 Descripción": st.column_config.TextColumn(
+                                    "📝 Descripción",
+                                    help="Descripción completa del movimiento (truncada en vista previa)",
+                                    width="large"
+                                ),
+                            }
                         )
 
                         st.caption(f"📊 Mostrando 10 de {len(result['new_data'])} registros nuevos")
+                        st.caption("💡 La descripción está truncada a 80 caracteres. Los datos completos se insertarán en Google Sheets.")
                     else:
                         st.warning("No hay columnas para mostrar")
             else:
