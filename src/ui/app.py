@@ -5,6 +5,7 @@ Interfaz de usuario profesional para conciliación bancaria
 """
 
 import os
+import time
 import streamlit as st
 import logging
 from typing import Dict, Any, Optional
@@ -59,7 +60,9 @@ class ConciliadorApp:
                 "processing_stats": {},
                 "google_sheets_ready": False,
                 "upload_completed": False,
-                "config_validated": False
+                "config_validated": False,
+                "data_sorted": False,
+                "sort_order": "desc"  # desc = más reciente primero, asc = más antiguo primero
             }
     
     def _setup_sidebar(self) -> Dict[str, Any]:
@@ -287,6 +290,77 @@ class ConciliadorApp:
             st.warning("⚠️ No se pudieron procesar los archivos. Verifica que sean archivos válidos.")
             return
 
+        # ============ SECCIÓN DE ORGANIZACIÓN DE DATOS ============
+        st.markdown("---")
+        st.markdown("### 🔄 Organización de Datos")
+
+        col_sort1, col_sort2 = st.columns([2, 1])
+
+        with col_sort1:
+            st.markdown("**Ordenar datos cronológicamente (más reciente → más antiguo):**")
+            st.caption("📅 Los datos se insertarán en orden cronológico descendente")
+
+        with col_sort2:
+            # Botón para organizar datos (SIEMPRE descendente)
+            if st.button("🔄 Organizar Datos", type="secondary", use_container_width=True, key="btn_organizar"):
+                progress_placeholder = st.empty()
+
+                try:
+                    progress_placeholder.info("🔄 Organizando datos por fecha y hora...")
+
+                    # Organizar cada resultado (SIEMPRE descendente: más reciente primero)
+                    for result in successful:
+                        if not result["new_data"].empty:
+                            # Ordenar datos nuevos (ascending=False = más reciente primero)
+                            result["new_data"] = self.processor.sort_data_by_datetime(
+                                result["new_data"],
+                                ascending=False
+                            )
+
+                            # Ordenar datos raw también
+                            result["raw_data"] = self.processor.sort_data_by_datetime(
+                                result["raw_data"],
+                                ascending=False
+                            )
+
+                    # Actualizar estado
+                    st.session_state["processing_results"] = successful
+                    st.session_state.app_state["data_sorted"] = True
+                    st.session_state.app_state["sort_order"] = "desc"
+
+                    # Mostrar éxito de forma más suave
+                    progress_placeholder.success("✅ Datos organizados correctamente (más reciente → más antiguo)")
+                    time.sleep(0.8)  # Pausa breve para mejor UX
+                    progress_placeholder.empty()
+                    st.rerun()
+
+                except Exception as e:
+                    progress_placeholder.error(f"❌ Error organizando datos: {e}")
+                    logger.error(f"Error en organización de datos: {e}", exc_info=True)
+
+        # Mostrar estado de organización
+        if st.session_state.app_state.get("data_sorted", False):
+            st.success("✅ Datos organizados cronológicamente (más reciente → más antiguo)")
+
+            # Mostrar rango de fechas
+            try:
+                all_dates = []
+                for result in successful:
+                    if not result["new_data"].empty and "Fecha" in result["new_data"].columns:
+                        all_dates.extend(result["new_data"]["Fecha"].dropna().tolist())
+
+                if all_dates:
+                    fecha_min = min(all_dates)
+                    fecha_max = max(all_dates)
+                    st.info(f"📅 Rango de fechas procesadas: **{fecha_max}** (más reciente) → **{fecha_min}** (más antiguo)")
+            except Exception as e:
+                logger.warning(f"Error mostrando rango de fechas: {e}")
+        else:
+            st.warning("⚠️ Datos NO organizados. Presiona el botón '🔄 Organizar Datos' para ordenarlos antes de insertar.")
+
+        st.markdown("---")
+        # ============ FIN SECCIÓN DE ORGANIZACIÓN ============
+
         for result in successful:
             num_registros = len(result['new_data']) if not result['new_data'].empty else 0
             num_duplicados = len(result.get('duplicates', []))
@@ -324,22 +398,100 @@ class ConciliadorApp:
                     if num_duplicados > 20:
                         st.info(f"Mostrando 20 de {num_duplicados} duplicados. Los demás también serán omitidos.")
 
-            # Mostrar vista previa de datos nuevos
+            # Mostrar vista previa de datos nuevos (ahora ordenados si se aplicó)
             if not result["new_data"].empty:
-                with st.expander("✅ Vista previa de datos NUEVOS (se insertarán)", expanded=False):
-                    st.dataframe(result["new_data"].head(10), use_container_width=True)
+                preview_title = "✅ Vista previa de datos NUEVOS que se insertarán"
+                if st.session_state.app_state.get("data_sorted", False):
+                    preview_title += " 🔽 (ordenados cronológicamente)"
+
+                with st.expander(preview_title, expanded=False):
+                    st.markdown("**📋 Primeros 10 registros:**")
+
+                    # Crear DataFrame de vista previa con formato personalizado
+                    preview_data = result["new_data"].head(10).copy()
+
+                    # Seleccionar y ordenar columnas para mejor visualización
+                    display_cols = []
+                    col_mapping = {}
+
+                    if "Fecha" in preview_data.columns:
+                        display_cols.append("Fecha")
+                        col_mapping["Fecha"] = "📅 Fecha"
+
+                    if "Hora" in preview_data.columns:
+                        display_cols.append("Hora")
+                        col_mapping["Hora"] = "⏰ Hora"
+
+                    if "Recibo" in preview_data.columns:
+                        display_cols.append("Recibo")
+                        col_mapping["Recibo"] = "🔑 Recibo"
+                    elif "Clave" in preview_data.columns:
+                        display_cols.append("Clave")
+                        col_mapping["Clave"] = "🔑 Clave"
+
+                    if "Descripción" in preview_data.columns:
+                        display_cols.append("Descripción")
+                        col_mapping["Descripción"] = "📝 Descripción"
+
+                    if "Cargo" in preview_data.columns:
+                        display_cols.append("Cargo")
+                        col_mapping["Cargo"] = "💸 Cargo"
+
+                    if "Abono" in preview_data.columns:
+                        display_cols.append("Abono")
+                        col_mapping["Abono"] = "💰 Abono"
+
+                    # Filtrar solo columnas disponibles
+                    display_cols = [col for col in display_cols if col in preview_data.columns]
+
+                    if display_cols:
+                        preview_display = preview_data[display_cols].rename(columns=col_mapping)
+
+                        # Configurar opciones de visualización
+                        st.dataframe(
+                            preview_display,
+                            use_container_width=True,
+                            hide_index=True,
+                            height=400
+                        )
+
+                        st.caption(f"📊 Mostrando 10 de {len(result['new_data'])} registros nuevos")
+                    else:
+                        st.warning("No hay columnas para mostrar")
             else:
                 st.info("✅ No hay registros nuevos en este archivo (todos son duplicados)")
 
             st.markdown("---")
-        
+
         # Botón para proceder a inserción (solo contar archivos exitosos)
         total_new = sum([len(r["new_data"]) for r in successful if not r["new_data"].empty])
         if total_new > 0:
-            if st.button(f"➡️ Proceder a Inserción ({total_new} registros)", 
-                       type="primary", use_container_width=True):
-                st.session_state.app_state["current_step"] = 2
-                st.rerun()
+            st.markdown("---")
+
+            # Validar si los datos están ordenados
+            if not st.session_state.app_state.get("data_sorted", False):
+                st.warning("⚠️ **Recomendación:** Organiza los datos antes de proceder a la inserción")
+
+            # Información de datos listos
+            col_info1, col_info2 = st.columns([2, 1])
+
+            with col_info1:
+                st.success(f"✅ **{total_new} registros** listos para insertar en Google Sheets")
+                if st.session_state.app_state.get("data_sorted", False):
+                    st.info("📋 Datos organizados cronológicamente (más reciente → más antiguo)")
+
+            with col_info2:
+                st.markdown("")  # Espaciado
+                st.markdown("### ➡️ Siguiente paso:")
+                st.info("**Haz clic en la pestaña:**\n\n📊 **Insertar a Sheets**")
+
+            # Botón informativo que prepara el estado
+            if st.button(f"✓ Confirmar y Preparar Inserción",
+                       type="primary", use_container_width=True, key="btn_preparar_insercion"):
+                st.session_state.app_state["ready_for_insertion"] = True
+                st.balloons()
+                st.success("🎉 ¡Datos confirmados! Ahora ve a la pestaña **'📊 Insertar a Sheets'** para completar la inserción.")
+                st.info("👆 Haz clic en la pestaña **'📊 Insertar a Sheets'** arriba para continuar")
     
     def _render_insertion_tab(self, sidebar_config: Dict[str, Any]):
         """Renderizar pestaña de inserción"""

@@ -21,12 +21,78 @@ logger = logging.getLogger(__name__)
 
 class BankProcessor:
     """Procesador principal de archivos bancarios"""
-    
+
     def __init__(self):
         """Inicializar el procesador"""
         self.parser = BankParser()
         self.reader = BankReader()
         self.formatter = DataFormatter()
+
+    def sort_data_by_datetime(self, df: pd.DataFrame, ascending: bool = False) -> pd.DataFrame:
+        """
+        Ordenar datos por fecha y hora (más reciente primero por defecto)
+
+        Args:
+            df: DataFrame con datos a ordenar
+            ascending: Si True, ordena de más antiguo a más reciente.
+                      Si False (default), ordena de más reciente a más antiguo.
+
+        Returns:
+            DataFrame ordenado con columna temporal removida
+        """
+        if df.empty:
+            return df
+
+        # Verificar que existan las columnas necesarias
+        if "Fecha" not in df.columns or "Hora" not in df.columns:
+            logger.warning("DataFrame no contiene columnas Fecha y Hora para ordenar")
+            return df
+
+        try:
+            # Crear columna temporal combinando fecha y hora
+            df_sorted = df.copy()
+
+            # Normalizar fechas a datetime
+            def parse_datetime(row):
+                try:
+                    fecha_str = str(row["Fecha"])
+                    hora_str = str(row["Hora"]) if pd.notna(row["Hora"]) else "00:00:00"
+
+                    # Manejar diferentes formatos de fecha
+                    if "-" in fecha_str and len(fecha_str.split("-")) == 3:
+                        # Formato ISO (2025-01-15) o dd-mmm-yyyy
+                        if len(fecha_str.split("-")[0]) == 4:  # YYYY-MM-DD
+                            fecha_dt = pd.to_datetime(fecha_str, format="%Y-%m-%d")
+                        else:  # dd-mmm-yyyy
+                            fecha_dt = pd.to_datetime(fecha_str, format="%d-%b-%Y")
+                    else:
+                        fecha_dt = pd.to_datetime(fecha_str)
+
+                    # Combinar fecha y hora
+                    datetime_combined = pd.to_datetime(f"{fecha_dt.date()} {hora_str}")
+                    return datetime_combined
+                except Exception as e:
+                    logger.warning(f"Error parseando fecha/hora: {e}")
+                    return pd.NaT
+
+            df_sorted["_datetime_temp"] = df_sorted.apply(parse_datetime, axis=1)
+
+            # Ordenar por la columna temporal
+            df_sorted = df_sorted.sort_values("_datetime_temp", ascending=ascending)
+
+            # Remover columna temporal
+            df_sorted = df_sorted.drop(columns=["_datetime_temp"])
+
+            # Resetear índices
+            df_sorted = df_sorted.reset_index(drop=True)
+
+            logger.info(f"Datos ordenados: {len(df_sorted)} registros ({'ascendente' if ascending else 'descendente'})")
+
+            return df_sorted
+
+        except Exception as e:
+            logger.error(f"Error ordenando datos por fecha/hora: {e}")
+            return df
         
     def process_files(
         self, 
