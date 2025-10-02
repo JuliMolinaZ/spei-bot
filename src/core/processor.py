@@ -290,13 +290,7 @@ class BankProcessor:
             Set de combinaciones "recibo|descripcion"
         """
         try:
-            # Importar SheetsClient para acceder a los datos
-            import sys
-            from pathlib import Path
-            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-            from sheets_client import SheetsClient
-
-            sheets_client = SheetsClient(sheets_service.sheet_id)
+            # Usar el servicio existente para acceder a la pestaña
             worksheet = sheets_service.worksheet.worksheet("Acumulado")
 
             # Obtener todas las filas
@@ -317,6 +311,7 @@ class BankProcessor:
                         if recibo and desc:
                             existing_recibo_desc.add(f"{recibo}|{desc}")
 
+            logger.info(f"✅ Obtenidas {len(existing_recibo_desc)} combinaciones Recibo+Descripción de Sheets")
             return existing_recibo_desc
 
         except Exception as e:
