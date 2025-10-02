@@ -35,10 +35,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY src/ ./src/
 COPY main.py .
 COPY sheets_client.py .
-COPY bank_parser.py .
 COPY .env .
+COPY .env.example .
 COPY spei-bot-b202259d87e7.json .
-COPY env.example .
+COPY .streamlit/ ./.streamlit/
 
 # Crear directorios necesarios
 RUN mkdir -p logs && \
