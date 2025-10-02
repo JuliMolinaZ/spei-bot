@@ -17,11 +17,11 @@ st.set_page_config(
     page_title="SPEI-BOT",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",  # Minimizado por defecto
     menu_items={
         'Get Help': 'https://github.com/JuliMolinaZ/spei-bot',
         'Report a bug': 'https://github.com/JuliMolinaZ/spei-bot/issues',
-        'About': "SPEI-BOT - Sistema Profesional de Conciliación Bancaria v2.0"
+        'About': "SPEI-BOT v2.0"
     }
 )
 

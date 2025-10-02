@@ -195,11 +195,96 @@ class UIComponents:
             ::-webkit-scrollbar-thumb:hover {
                 background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
             }
+
+            /* Botón flotante para sidebar */
+            .floating-sidebar-btn {
+                position: fixed;
+                bottom: 30px;
+                left: 30px;
+                z-index: 999;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                border-radius: 50%;
+                width: 70px;
+                height: 70px;
+                font-size: 2.5rem;
+                cursor: pointer;
+                box-shadow: 0 8px 25px rgba(102,126,234,0.5);
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .floating-sidebar-btn:hover {
+                transform: translateY(-5px) scale(1.1);
+                box-shadow: 0 12px 35px rgba(102,126,234,0.7);
+                background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+            }
+
+            .floating-sidebar-btn:active {
+                transform: translateY(-2px) scale(1.05);
+            }
+
+            /* Header compacto */
+            .compact-header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 1.5rem;
+                border-radius: 15px;
+                margin-bottom: 1.5rem;
+                text-align: center;
+                box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            }
+
+            /* Cards compactas */
+            .compact-card {
+                background: white;
+                border-radius: 12px;
+                padding: 1.5rem;
+                margin-bottom: 1rem;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+                border-left: 4px solid #667eea;
+                transition: all 0.3s ease;
+            }
+
+            .compact-card:hover {
+                box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+                transform: translateX(5px);
+            }
+
+            /* Reducir padding general */
+            .main .block-container {
+                padding-top: 2rem !important;
+                padding-bottom: 2rem !important;
+                max-width: 1400px !important;
+            }
         </style>
         """, unsafe_allow_html=True)
     
+    def render_compact_header(self):
+        """Renderizar header compacto"""
+        st.markdown("""
+        <div class="compact-header">
+            <h2 style="color: white; margin: 0; font-size: 1.8rem; font-weight: 700;">
+                🤖 SPEI BOT
+            </h2>
+            <p style="color: rgba(255,255,255,0.9); margin: 0.3rem 0 0 0; font-size: 0.9rem;">
+                Conciliación Bancaria Automática
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    def render_floating_sidebar_button(self):
+        """Renderizar botón flotante para abrir el sidebar"""
+        st.markdown("""
+        <div class="floating-sidebar-btn" onclick="document.querySelector('[data-testid=\\"stSidebar\\"]').click()">
+            🤖
+        </div>
+        """, unsafe_allow_html=True)
+
     def render_main_header(self):
-        """Renderizar header principal con branding SPEI BOT"""
+        """Renderizar header principal con branding SPEI BOT (versión completa - para referencia)"""
         st.markdown("""
         <div style="
             background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
