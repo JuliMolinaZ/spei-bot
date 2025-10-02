@@ -298,39 +298,39 @@ class ConciliadorApp:
         col_sort1, col_sort2 = st.columns([2, 1])
 
         with col_sort1:
-            st.markdown("**Ordenar datos cronológicamente (más reciente → más antiguo):**")
-            st.caption("📅 Los datos se insertarán en orden cronológico descendente")
+            st.markdown("**Ordenar datos cronológicamente (más antiguo → más reciente):**")
+            st.caption("📅 Los datos se insertarán en orden cronológico ascendente")
 
         with col_sort2:
-            # Botón para organizar datos (SIEMPRE descendente)
+            # Botón para organizar datos (SIEMPRE ascendente)
             if st.button("🔄 Organizar Datos", type="secondary", use_container_width=True, key="btn_organizar"):
                 progress_placeholder = st.empty()
 
                 try:
                     progress_placeholder.info("🔄 Organizando datos por fecha y hora...")
 
-                    # Organizar cada resultado (SIEMPRE descendente: más reciente primero)
+                    # Organizar cada resultado (SIEMPRE ascendente: más antiguo primero)
                     for result in successful:
                         if not result["new_data"].empty:
-                            # Ordenar datos nuevos (ascending=False = más reciente primero)
+                            # Ordenar datos nuevos (ascending=True = más antiguo primero)
                             result["new_data"] = self.processor.sort_data_by_datetime(
                                 result["new_data"],
-                                ascending=False
+                                ascending=True
                             )
 
                             # Ordenar datos raw también
                             result["raw_data"] = self.processor.sort_data_by_datetime(
                                 result["raw_data"],
-                                ascending=False
+                                ascending=True
                             )
 
                     # Actualizar estado
                     st.session_state["processing_results"] = successful
                     st.session_state.app_state["data_sorted"] = True
-                    st.session_state.app_state["sort_order"] = "desc"
+                    st.session_state.app_state["sort_order"] = "asc"
 
                     # Mostrar éxito de forma más suave
-                    progress_placeholder.success("✅ Datos organizados correctamente (más reciente → más antiguo)")
+                    progress_placeholder.success("✅ Datos organizados correctamente (más antiguo → más reciente)")
                     time.sleep(0.8)  # Pausa breve para mejor UX
                     progress_placeholder.empty()
                     st.rerun()
@@ -341,7 +341,7 @@ class ConciliadorApp:
 
         # Mostrar estado de organización
         if st.session_state.app_state.get("data_sorted", False):
-            st.success("✅ Datos organizados cronológicamente (más reciente → más antiguo)")
+            st.success("✅ Datos organizados cronológicamente (más antiguo → más reciente)")
 
             # Mostrar rango de fechas
             try:
@@ -353,7 +353,7 @@ class ConciliadorApp:
                 if all_dates:
                     fecha_min = min(all_dates)
                     fecha_max = max(all_dates)
-                    st.info(f"📅 Rango de fechas procesadas: **{fecha_max}** (más reciente) → **{fecha_min}** (más antiguo)")
+                    st.info(f"📅 Rango de fechas procesadas: **{fecha_min}** (más antiguo) → **{fecha_max}** (más reciente)")
             except Exception as e:
                 logger.warning(f"Error mostrando rango de fechas: {e}")
         else:
@@ -403,14 +403,18 @@ class ConciliadorApp:
             if not result["new_data"].empty:
                 preview_title = "✅ Vista previa de datos NUEVOS que se insertarán"
                 if st.session_state.app_state.get("data_sorted", False):
-                    preview_title += " 🔽 (ordenados cronológicamente)"
+                    preview_title += " 🔼 (ordenados: antiguo → reciente)"
 
                 with st.expander(preview_title, expanded=False):
                     st.markdown("**📋 Primeros 10 registros:**")
 
                     # IMPORTANTE: Explicar qué datos se muestran
-                    st.info("**🔑 Clave** = Número de Recibo que se usará para validar duplicados\n\n"
-                           "**📅 Fecha + ⏰ Hora** = Datos organizados cronológicamente")
+                    if st.session_state.app_state.get("data_sorted", False):
+                        st.info("**🔑 Clave** = Número de Recibo que se usará para validar duplicados\n\n"
+                               "**📅 Fecha + ⏰ Hora** = Ordenados cronológicamente (más antiguo → más reciente)")
+                    else:
+                        st.info("**🔑 Clave** = Número de Recibo que se usará para validar duplicados\n\n"
+                               "**📅 Fecha + ⏰ Hora** = Datos sin ordenar (presiona 'Organizar Datos')")
 
                     # Crear DataFrame de vista previa con formato personalizado
                     preview_data = result["new_data"].head(10).copy()
