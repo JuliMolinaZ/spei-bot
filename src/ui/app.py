@@ -14,14 +14,14 @@ from pathlib import Path
 
 # Configurar página ANTES de cualquier otra cosa
 st.set_page_config(
-    page_title="SPEI-BOT",
+    page_title="SPEI",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="collapsed",  # Minimizado por defecto
     menu_items={
         'Get Help': 'https://github.com/JuliMolinaZ/spei-bot',
         'Report a bug': 'https://github.com/JuliMolinaZ/spei-bot/issues',
-        'About': "SPEI-BOT v2.0"
+        'About': "SPEI BOT v2.0"
     }
 )
 
@@ -546,7 +546,6 @@ class ConciliadorApp:
             if st.button(f"✓ Confirmar y Preparar Inserción",
                        type="primary", use_container_width=True, key="btn_preparar_insercion"):
                 st.session_state.app_state["ready_for_insertion"] = True
-                st.balloons()
                 st.success("🎉 ¡Datos confirmados! Ahora ve a la pestaña **'📊 Insertar a Sheets'** para completar la inserción.")
                 st.info("👆 Haz clic en la pestaña **'📊 Insertar a Sheets'** arriba para continuar")
     
@@ -679,8 +678,6 @@ Descripción completa:
                     # Limpiar session state de resultados procesados
                     st.session_state.pop("processing_results", None)
                     st.session_state.pop("processing_summary", None)
-
-                    st.balloons()
 
                     # Mostrar link a Google Sheets
                     st.markdown("---")
