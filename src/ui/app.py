@@ -699,25 +699,47 @@ Descripción completa:
     def run(self):
         """Ejecutar la aplicación principal"""
         try:
+            # Inyectar CSS directamente en el parent document
+            import streamlit.components.v1 as components
+            components.html("""
+            <script>
+                // Inyectar CSS en el documento padre
+                const style = parent.document.createElement('style');
+                style.innerHTML = `
+                    section[data-testid="stSidebar"] {
+                        transform: translateX(-100%) !important;
+                        transition: transform 0.3s ease !important;
+                    }
+                    section[data-testid="stSidebar"][aria-expanded="true"] {
+                        transform: translateX(0) !important;
+                    }
+                `;
+                parent.document.head.appendChild(style);
+
+                // Limpiar localStorage COMPLETAMENTE
+                parent.localStorage.clear();
+            </script>
+            """, height=0)
+
             # Configurar sidebar
             sidebar_config = self._setup_sidebar()
-            
+
             # Renderizar header principal
             self.ui_components.render_main_header()
-            
+
             # Navegación por pestañas
             tabs = ["📁 Cargar Archivos", "🔍 Procesar Datos", "📊 Insertar a Sheets"]
             tab1, tab2, tab3 = st.tabs(tabs)
-            
+
             with tab1:
                 self._render_file_upload_tab(sidebar_config)
-            
+
             with tab2:
                 self._render_processing_tab()
-            
+
             with tab3:
                 self._render_insertion_tab(sidebar_config)
-                
+
         except Exception as e:
             logger.error(f"Error en la aplicación: {e}")
             st.error(f"Error fatal: {e}")

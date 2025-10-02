@@ -1,0 +1,23 @@
+[client]
+# Mostrar toolbar personalizado
+toolbarMode = "minimal"
+
+# Mostrar navegación del sidebar
+showSidebarNavigation = true
+
+[ui]
+# Ocultar menú de hamburguesa
+hideTopBar = false
+
+[server]
+# Puerto por defecto
+port = 8501
+
+# Headless mode
+headless = true
+
+# File watcher
+fileWatcherType = "auto"
+
+# Max upload size
+maxUploadSize = 200

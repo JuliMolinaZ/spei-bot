@@ -277,11 +277,39 @@ class UIComponents:
 
     def render_floating_sidebar_button(self):
         """Renderizar botón flotante para abrir el sidebar"""
+        # Usar session state para controlar sidebar
+        if 'sidebar_open' not in st.session_state:
+            st.session_state.sidebar_open = False
+
+        # Crear botón flotante con callback
         st.markdown("""
-        <div class="floating-sidebar-btn" onclick="document.querySelector('[data-testid=\\"stSidebar\\"]').click()">
-            🤖
-        </div>
+        <style>
+            /* Ocultar botón nativo de Streamlit */
+            button[kind="header"][data-testid="collapsedControl"] {
+                display: none !important;
+            }
+
+            .floating-robot-container {
+                position: fixed;
+                bottom: 30px;
+                left: 30px;
+                z-index: 9999;
+            }
+        </style>
         """, unsafe_allow_html=True)
+
+        # Botón flotante usando Streamlit nativo
+        col_robot = st.container()
+        with col_robot:
+            st.markdown("""
+            <div class="floating-robot-container">
+            """, unsafe_allow_html=True)
+
+            if st.button("🤖", key="sidebar_toggle", help="Abrir/Cerrar Configuración",
+                        type="primary"):
+                st.session_state.sidebar_open = not st.session_state.sidebar_open
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
     def render_main_header(self):
         """Renderizar header principal con branding SPEI BOT (versión completa - para referencia)"""
