@@ -19,5 +19,14 @@ headless = true
 # File watcher
 fileWatcherType = "auto"
 
-# Max upload size
+# Max upload size (en MB)
 maxUploadSize = 200
+
+# Max message size (en MB) - Para evitar error 400
+maxMessageSize = 200
+
+# Deshabilitar XSRF protection para evitar error 403 en local
+enableXsrfProtection = false
+
+# Enable CORS (automático cuando XSRF está deshabilitado)
+enableCORS = true

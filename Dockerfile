@@ -35,6 +35,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY src/ ./src/
 COPY main.py .
 COPY sheets_client.py .
+COPY users_config.py .
 COPY .env .
 COPY .env.example .
 COPY spei-bot-b202259d87e7.json .

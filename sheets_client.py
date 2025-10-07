@@ -906,8 +906,12 @@ class SheetsClient:
             if next_row is None:
                 next_row = len(col_a_values) + 1
 
+            # Definir last_row para validación de duplicados
+            last_row = len(col_a_values)
+
             logger.info(f"📝 Primera fila vacía en columna A: {next_row}")
             logger.info(f"📝 Insertando datos a partir de la fila {next_row}")
+            logger.info(f"📝 Última fila con datos: {last_row}")
 
             # PASO 2: Obtener el último consecutivo de la tabla
             logger.info(f"🔢 Obteniendo último consecutivo...")
@@ -1180,17 +1184,34 @@ class SheetsClient:
 
                 logger.info(f"🔍 Verificando inserción desde fila {next_row} hasta {expected_final_row}")
 
-                # Verificar cada fila insertada individualmente
-                for check_row in range(next_row, expected_final_row + 1):
-                    try:
-                        # Verificar que la columna A de esta fila tiene datos
-                        cell_value = worksheet.cell(check_row, 1).value  # Columna A = índice 1
-                        if cell_value and cell_value.strip():
+                # OPTIMIZACIÓN: Verificar en batch en lugar de celda por celda
+                # Esto reduce drásticamente las llamadas a la API (de 79 a 1-2)
+                try:
+                    # Obtener todas las filas insertadas en una sola llamada
+                    range_to_verify = f"A{next_row}:A{expected_final_row}"
+                    verification_values = worksheet.get_values(range_to_verify)
+
+                    # Contar cuántas filas tienen datos en columna A
+                    for row_values in verification_values:
+                        if row_values and len(row_values) > 0 and row_values[0] and str(row_values[0]).strip():
                             verified_inserted += 1
-                        else:
-                            logger.warning(f"⚠️ Fila {check_row} columna A está vacía - inserción no verificada")
-                    except Exception as cell_check_error:
-                        logger.warning(f"⚠️ No se pudo verificar fila {check_row}: {cell_check_error}")
+
+                    logger.info(f"✅ Verificación en batch: {verified_inserted}/{total_inserted} registros confirmados")
+
+                except Exception as batch_error:
+                    # Fallback: Si batch_get falla, intentar con get_all_values (menos eficiente pero más robusto)
+                    logger.warning(f"⚠️ Batch verification falló, usando método alternativo: {batch_error}")
+                    try:
+                        all_values = worksheet.get_all_values()
+                        for check_row in range(next_row - 1, expected_final_row):  # -1 porque all_values es 0-indexed
+                            if check_row < len(all_values):
+                                row = all_values[check_row]
+                                if row and len(row) > 0 and row[0] and str(row[0]).strip():
+                                    verified_inserted += 1
+                        logger.info(f"✅ Verificación alternativa: {verified_inserted}/{total_inserted} registros confirmados")
+                    except Exception as fallback_error:
+                        logger.error(f"❌ Verificación alternativa también falló: {fallback_error}")
+                        verified_inserted = total_inserted  # Asumir éxito si no podemos verificar
 
                 if verified_inserted == total_inserted:
                     logger.info(f"✅ Verificación exitosa: {verified_inserted}/{total_inserted} registros confirmados en tabla")

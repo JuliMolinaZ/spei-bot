@@ -30,6 +30,7 @@ from config.settings import load_config, validate_config
 from services.google_sheets import GoogleSheetsService
 from core.processor import BankProcessor
 from ui.components import UIComponents
+from ui.login_ui import LoginUI
 from utils.helpers import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -42,13 +43,14 @@ class ConciliadorApp:
         self.config = load_config()
         self.ui_components = UIComponents()
         self.processor = BankProcessor()
+        self.login_ui = LoginUI()
         self.sheets_service: Optional[GoogleSheetsService] = None
-        
+
         # Validar configuración
         config_errors = validate_config(self.config)
         if config_errors:
             logger.warning(f"Errores de configuración: {config_errors}")
-        
+
         self._setup_session_state()
     
     
@@ -79,10 +81,13 @@ class ConciliadorApp:
             
             # Estado de conexión
             connection_status = self._render_connection_status(sheet_config)
-            
+
             # Estadísticas de sesión
             self._render_session_stats()
-            
+
+            # Información de sesión de usuario
+            self.login_ui.render_session_info()
+
             return {
                 "sheet_id": sheet_config["sheet_id"],
                 "sheet_tab": sheet_config["sheet_tab"],
@@ -93,12 +98,13 @@ class ConciliadorApp:
     def _render_sheets_config(self) -> Dict[str, str]:
         """Renderizar configuración de Google Sheets"""
         st.markdown("#### 📊 Google Sheets")
-        
+
         sheet_id = st.text_input(
-            "ID de la Hoja", 
+            "ID de la Hoja",
             value=self.config.get("SHEET_ID", ""),
             placeholder="1BvyC2y3nRhCvKa9Q8yX7zF...",
-            help="El ID de tu hoja de Google Sheets"
+            help="El ID de tu hoja de Google Sheets",
+            type="password"
         )
         
         sheet_tab = st.text_input(
@@ -192,21 +198,13 @@ class ConciliadorApp:
             # Limpiar el mensaje después de mostrarlo
             del st.session_state["processing_summary"]
 
-        self.ui_components.render_file_upload_zone()
-        
-        col1, col2 = st.columns([3, 1])
-
-        with col1:
-            uploaded_files = st.file_uploader(
-                "Selecciona archivos bancarios",
-                accept_multiple_files=True,
-                type=['txt', 'csv'],
-                help="Puedes cargar múltiples archivos a la vez",
-                label_visibility="collapsed"
-            )
-
-        with col2:
-            self.ui_components.render_upload_tips()
+        # Zona de drag & drop integrada directamente
+        uploaded_files = st.file_uploader(
+            "📁 **Arrastra tus archivos aquí o haz clic para seleccionar**\n\nSoporta archivos TXT y CSV de BanBajío",
+            accept_multiple_files=True,
+            type=['txt', 'csv'],
+            help="Puedes cargar múltiples archivos a la vez (máx 200MB por archivo)"
+        )
 
         if uploaded_files:
             if st.button("🔍 Analizar Archivos", type="primary", use_container_width=True):
@@ -695,6 +693,11 @@ Descripción completa:
     
     def run(self):
         """Ejecutar la aplicación principal"""
+        # 🔐 VERIFICAR AUTENTICACIÓN PRIMERO
+        if not self.login_ui.check_authentication():
+            # Si no está autenticado, LoginUI ya mostró la página de login
+            return
+
         try:
             # Inyectar CSS directamente en el parent document
             import streamlit.components.v1 as components
