@@ -57,6 +57,7 @@ spei-bot-*.json
 # ⚠️ IMPORTANTE: Configuración de usuarios con contraseñas
 users_config.py
 users_config_production.py
+CREDENCIALES_PRODUCCION.txt
 
 # Logs
 logs/
