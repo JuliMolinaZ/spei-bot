@@ -99,11 +99,23 @@ DEMO_MODE=false
 
 ### Configuración de Google Sheets
 
+**📚 Guías Completas Disponibles:**
+- **[Inicio Rápido](INICIO_RAPIDO_SHEETS.md)** - 5 pasos para conectar tu hoja (⏱️ 10 min)
+- **[Guía Detallada](docs/CONFIGURACION_GOOGLE_SHEETS.md)** - Documentación completa paso a paso
+
+**🚀 Resumen Rápido:**
+
 1. **Crear Service Account** en [Google Cloud Console](https://console.cloud.google.com/)
 2. **Habilitar Google Sheets API**
 3. **Descargar JSON de credenciales**
-4. **Compartir tu hoja** con el email del Service Account
+4. **Compartir tu hoja** con el email del Service Account (rol: Editor)
 5. **Configurar variables** en `.env`
+
+**✅ Verificar Configuración:**
+```bash
+# Ejecutar script de verificación
+python verificar_conexion.py
+```
 
 ## 📖 Uso
 
